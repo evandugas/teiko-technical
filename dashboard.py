@@ -55,12 +55,14 @@ def compute_stats():
         & (df["sample_type"] == "PBMC")
     ].copy()
 
+    n_tests = len(POPULATIONS)
     rows = []
     for pop in POPULATIONS:
         pop_data = subset[subset["Population"] == pop]
         resp = pop_data[pop_data["response"] == "yes"]["Percentage"].values
         non_resp = pop_data[pop_data["response"] == "no"]["Percentage"].values
         stat, p = stats.mannwhitneyu(resp, non_resp, alternative="two-sided")
+        p_bonf = min(p * n_tests, 1.0)
         rows.append(
             {
                 "Population": pop,
@@ -70,7 +72,9 @@ def compute_stats():
                 "Median — non-responders": round(float(pd.Series(non_resp).median()), 2),
                 "Mann-Whitney U": round(stat, 2),
                 "p-value": round(p, 4),
-                "Significant (p<0.05)": "Yes" if p < 0.05 else "No",
+                "Significant (raw, p<0.05)": "Yes" if p < 0.05 else "No",
+                "p-value (Bonferroni)": round(p_bonf, 4),
+                "Significant (Bonferroni)": "Yes" if p_bonf < 0.05 else "No",
             }
         )
     return pd.DataFrame(rows), subset
@@ -165,14 +169,26 @@ def main():
         st.header("Responders vs Non-responders")
         st.markdown(
             "Filter applied: **melanoma** patients on **miraclib**, **PBMC** samples only.  \n"
-            "Test: Mann-Whitney U (two-sided)."
+            "Test: Mann-Whitney U (two-sided), Bonferroni-corrected for "
+            f"{len(POPULATIONS)} comparisons (adjusted α = 0.05 / {len(POPULATIONS)} = "
+            f"{0.05 / len(POPULATIONS):.3f})."
         )
 
         results_df, subset = compute_stats()
 
-        sig_pops = results_df[results_df["Significant (p<0.05)"] == "Yes"]["Population"].tolist()
-        if sig_pops:
-            st.success(f"Significant difference (p < 0.05) detected in: **{', '.join(sig_pops)}**")
+        sig_pops_raw = results_df[results_df["Significant (raw, p<0.05)"] == "Yes"]["Population"].tolist()
+        sig_pops_bonf = results_df[results_df["Significant (Bonferroni)"] == "Yes"]["Population"].tolist()
+
+        if sig_pops_bonf:
+            st.success(
+                f"Significant after Bonferroni correction: **{', '.join(sig_pops_bonf)}**"
+            )
+        elif sig_pops_raw:
+            st.warning(
+                f"**{', '.join(sig_pops_raw)}** significant at raw p < 0.05, but does **not** "
+                f"survive Bonferroni correction for {len(POPULATIONS)} comparisons — "
+                "treat as a weak/unconfirmed signal, not a robust finding."
+            )
         else:
             st.info("No populations showed a statistically significant difference at p < 0.05.")
 
@@ -197,7 +213,8 @@ def main():
         st.subheader("Single population view")
         sel_pop2 = st.selectbox("Select population", POPULATIONS, key="stat_pop")
         pop_sub = subset[subset["Population"] == sel_pop2]
-        p_val = results_df[results_df["Population"] == sel_pop2]["p-value"].values[0]
+        pop_row = results_df[results_df["Population"] == sel_pop2].iloc[0]
+        p_val, p_bonf_val = pop_row["p-value"], pop_row["p-value (Bonferroni)"]
         fig2 = px.box(
             pop_sub,
             x="response",
@@ -206,7 +223,7 @@ def main():
             color_discrete_map={"yes": "#4C9BE8", "no": "#E85C5C"},
             points="all",
             labels={"Percentage": "Relative frequency (%)", "response": "Response"},
-            title=f"{sel_pop2}  —  p = {p_val}",
+            title=f"{sel_pop2}  —  p = {p_val}  (Bonferroni p = {p_bonf_val})",
             category_orders={"response": ["yes", "no"]},
         )
         fig2.update_layout(showlegend=False)

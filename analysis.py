@@ -68,6 +68,7 @@ def part3_statistical_analysis(conn, freq_df):
         & (df["sample_type"] == "PBMC")
     ].copy()
 
+    n_tests = len(POPULATIONS)
     rows = []
     for pop in POPULATIONS:
         pop_data = subset[subset["Population"] == pop]
@@ -75,6 +76,7 @@ def part3_statistical_analysis(conn, freq_df):
         non_resp = pop_data[pop_data["response"] == "no"]["Percentage"].values
 
         stat, p = stats.mannwhitneyu(resp, non_resp, alternative="two-sided")
+        p_bonf = min(p * n_tests, 1.0)
         rows.append(
             {
                 "Population": pop,
@@ -85,6 +87,8 @@ def part3_statistical_analysis(conn, freq_df):
                 "MannWhitneyU": round(stat, 4),
                 "p_value": round(p, 4),
                 "significant": p < 0.05,
+                "p_value_bonferroni": round(p_bonf, 4),
+                "significant_bonferroni": p_bonf < 0.05,
             }
         )
 
@@ -93,6 +97,14 @@ def part3_statistical_analysis(conn, freq_df):
     results_df.to_csv(out, index=False)
     print(f"\n[Part 3] Statistical results saved to {out}")
     print(results_df.to_string(index=False))
+
+    sig_raw = results_df[results_df["significant"]]["Population"].tolist()
+    sig_bonf = results_df[results_df["significant_bonferroni"]]["Population"].tolist()
+    print(f"\n[Part 3] Significant at raw p<0.05: {sig_raw or 'none'}")
+    print(
+        f"[Part 3] Significant after Bonferroni correction "
+        f"(n={n_tests} tests, adjusted alpha={0.05 / n_tests:.3f}): {sig_bonf or 'none'}"
+    )
 
     _save_boxplots(subset, results_df)
     return results_df
@@ -118,15 +130,23 @@ def _save_boxplots(subset, results_df):
         bp["boxes"][0].set_facecolor(colors["yes"])
         bp["boxes"][1].set_facecolor(colors["no"])
 
-        p = results_df[results_df["Population"] == pop]["p_value"].values[0]
-        sig_label = "* p<0.05" if p < 0.05 else "ns"
+        row = results_df[results_df["Population"] == pop].iloc[0]
+        p, p_bonf = row["p_value"], row["p_value_bonferroni"]
+        if p_bonf < 0.05:
+            sig_label = "** sig. (Bonferroni)"
+        elif p < 0.05:
+            sig_label = "* sig. (uncorrected)"
+        else:
+            sig_label = "ns"
         ax.set_title(f"{pop}\np={p:.4f}  {sig_label}", fontsize=9)
         ax.set_ylabel("Relative frequency (%)")
         ax.tick_params(axis="x", labelsize=8)
 
+    n_tests = len(POPULATIONS)
     fig.suptitle(
         "Immune cell frequencies — Responders vs Non-responders\n"
-        "(Melanoma · Miraclib · PBMC)",
+        "(Melanoma · Miraclib · PBMC)  ·  Mann-Whitney U, "
+        f"Bonferroni-corrected for {n_tests} tests (adjusted α={0.05 / n_tests:.3f})",
         fontsize=12,
         fontweight="bold",
     )

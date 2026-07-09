@@ -96,6 +96,28 @@ Cell counts are stored in a long/tidy format — one row per population per samp
 
 ---
 
+## Part 3 findings
+
+**Do relative frequencies of any cell population differ between responders and non-responders?**
+
+Filtered to: condition=melanoma, treatment=miraclib, sample_type=PBMC. For each of the 5 populations, responders vs. non-responders were compared with a Mann-Whitney U test (two-sided, non-parametric — no normality assumption on relative frequency).
+
+Since 5 populations are tested simultaneously, raw p-values were also Bonferroni-corrected (adjusted α = 0.05 / 5 = 0.010) to control the false-positive rate across the family of tests.
+
+| Population | p-value | p-value (Bonferroni) | Significant (raw) | Significant (Bonferroni) |
+|---|---|---|---|---|
+| cd4_t_cell | 0.0134 | 0.0670 | Yes | **No** |
+| b_cell | 0.0557 | 0.2787 | No | No |
+| nk_cell | 0.1211 | 0.6053 | No | No |
+| monocyte | 0.1635 | 0.8175 | No | No |
+| cd8_t_cell | 0.6392 | 1.0000 | No | No |
+
+**Conclusion:** `cd4_t_cell` is the only population with a raw p < 0.05, but it does not survive Bonferroni correction. At this sample size, none of the 5 populations show a statistically robust difference in relative frequency between responders and non-responders — the `cd4_t_cell` signal should be treated as a weak, unconfirmed lead worth following up with more data rather than a finding to act on.
+
+Full results: `outputs/statistical_results.csv`. Boxplots: `outputs/plots/boxplots_responders_vs_nonresponders.png`.
+
+---
+
 ## Part 4 answer
 
 **Considering melanoma males, what is the average number of B cells for responders at time=0?**
